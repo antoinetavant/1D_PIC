@@ -5,10 +5,7 @@ import scipy as sp
 import astropy
 
 from imp import reload
-from . import particles
-reload(particles)
-from .particles import particles
-from .functions import generate_maxw, velocity_maxw_flux
+from functions import generate_maxw, velocity_maxw_flux
 
 me = 9.109e-31; #[kg] electron mass
 q = 1.6021765650e-19; #[C] electron charge
@@ -20,13 +17,11 @@ mi = 131*1.6726219e27 #[kg]
 class plasma:
     """a class with fields, parts, and method to pass from one to the other"""
 
+
+
     def __init__(self,dT,Nx,Lx,Npart,n,Te,Ti):
 
-        self.history = {'Ie_w' : [],
-                        'Ii_w' : [],
-                        'Ie_c' : [],
-                        'Ii_c' : []
-                        }
+        from .particles import particles as particles
 
         self.Lx = Lx
         self.dT = dT
@@ -40,6 +35,12 @@ class plasma:
         self.ni = np.zeros((Nx+1))
         self.rho = np.zeros((Nx+1))
 
+        self.history = {'Ie_w' : [],
+                        'Ii_w' : [],
+                        'Ie_c' : [],
+                        'Ii_c' : []
+                        }
+
         self.x_j = np.arange(0,Nx+1)*self.Lx/(Nx)
         self.dx = self.x_j[1]
 
@@ -50,14 +51,21 @@ class plasma:
         for sign,part in zip([-1,1],[self.ele,self.ion]):
             E = [interpolate.interp1d(self.x_j,self.E[:,i]) for i in [0,1,2]]
             for i in [0,1,2]:
-                try:
-                    part.V[:,i] -= sign*q/me*self.dT*E[i](part.x)
-                except:
-                    print(part.x,part.V[:,0],self.Lx)
-                    raise ValueError
+
+                if False:
+                    #slow calculation
+                    for p in np.arange(part.Npart):
+                        part.V[p,i] -= sign*q/me*self.dT*E[i](part.x[p])
+
+                else:
+                    #fast calculation
+                    try:
+                        part.V[:,i] -= sign*q/me*self.dT*E[i](part.x)
+                    except:
+                        print(part.x,max(part.x),min(part.x),part.V[:,0],self.Lx)
+                        raise ValueError
             part.x += part.V[:,0] *self.dT
 
-        self.boundary()
 
     def boundary(self):
         """look at the postition of the particle, and remove them if they are outside"""
@@ -110,6 +118,8 @@ class plasma:
 
         for n, part in zip([self.ne,self.ni],[self.ele,self.ion]):
             n[:] = 0
+
+
             for i in np.arange(part.Npart):
                 try:
                     j = np.argwhere(self.x_j>=part.x[i])[0][0]

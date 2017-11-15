@@ -5,8 +5,7 @@ import scipy as sp
 import astropy
 
 from imp import reload
-from .plasma import plasma as pl
-from .functions import generate_maxw, velocity_maxw_flux
+from functions import generate_maxw, velocity_maxw_flux
 
 
 me = 9.109e-31; #[kg] electron mass
@@ -18,6 +17,8 @@ mi = 131*1.6726219e27 #[kg]
 
 class particles:
     """a Class with enouth attribute and methode to deal with particles"""
+
+
     def __init__(self, Npart,T,m,pl ):
 
         self.T = T
