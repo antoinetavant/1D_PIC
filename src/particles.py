@@ -7,6 +7,7 @@ import astropy
 from imp import reload
 from functions import generate_maxw, velocity_maxw_flux
 
+from numba import jit
 
 me = 9.109e-31; #[kg] electron mass
 q = 1.6021765650e-19; #[C] electron charge
@@ -35,12 +36,13 @@ class particles:
         """Generate uniforme particle, with maxwellian stuff"""
 
         from random import random
-        self.x = np.array([random()*self.pl.Lx for i in np.arange(self.Npart)])
+        from numpy.random import rand
+        self.x = rand(self.Npart)*self.pl.Lx 
 
         self.V = [[generate_maxw(self.T,self.m),generate_maxw(self.T,self.m),generate_maxw(self.T,self.m)] for i in np.arange(self.Npart)]
         self.V = np.array(self.V)
 
-    def add_uniform_part(self):
+    def add_uniform_part(self,N):
         """Generate one uniforme particle, with maxwellian stuff"""
 
         from random import random
@@ -62,3 +64,20 @@ class particles:
 
 
         self.x = np.append(self.x,random()*self.V[-1,0]*self.pl.dT)
+
+    #@jit
+    def return_density(self,tabx):
+        """interpolate the density """
+
+        n = np.zeros(len(tabx))
+        for i in np.arange(self.Npart):
+            j = self.returnindex(self.x[i])
+            deltax = tabx[j] - self.x[i]
+            n[j-1] += (1 - deltax)
+            n[j] += (deltax)
+
+        return n
+
+    def returnindex(self,x):
+        """return the index of the cell where the particle is"""
+        return int(x/self.pl.dx)

@@ -4,6 +4,9 @@ import numpy as np
 import scipy as sp
 import astropy
 
+from numba import jit
+
+
 me = 9.109e-31; #[kg] electron mass
 q = 1.6021765650e-19; #[C] electron charge
 kb = 1.3806488e-23;  #Blozman constant
@@ -34,3 +37,12 @@ def velocity_maxw_flux(T,m):
     R = random.random()
     v = (v_Te*np.sqrt(-np.log(R)))
     return v
+
+
+def max_vect(N, *args):
+
+    return np.array([generate_maxw(args) for i in np.arange(N)])
+
+def fux_vect(N, *args):
+
+    return np.array([velocity_maxw_flux(args) for i in np.arange(N)])

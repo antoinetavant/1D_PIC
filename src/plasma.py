@@ -6,6 +6,7 @@ import astropy
 
 from imp import reload
 from functions import generate_maxw, velocity_maxw_flux
+from numba import jit
 
 me = 9.109e-31; #[kg] electron mass
 q = 1.6021765650e-19; #[C] electron charge
@@ -91,10 +92,10 @@ class plasma:
 
         #Would be better to add an array of particle, not a single one
         for i in np.arange(Ne):
-            self.ele.add_uniform_part()
+            self.ele.add_uniform_part(Ne)
 
         for i in np.arange(Ni):
-            self.ion.add_uniform_part()
+            self.ion.add_uniform_part(Ni)
 
     def inject_flux(self,Ne,Ni):
         """inject particle with maxwellian distribution uniformely in the system"""
@@ -112,25 +113,15 @@ class plasma:
             self.ion.x[-1] *= -1
             self.ion.x[-1] += self.Lx
 
+
     def compute_rho(self):
         """Compute the plasma density via the invers aera method"""
 
+        self.ne = self.ele.return_density(self.x_j)
+        self.ni = self.ion.return_density(self.x_j)
 
-        for n, part in zip([self.ne,self.ni],[self.ele,self.ion]):
-            n[:] = 0
-
-
-            for i in np.arange(part.Npart):
-                try:
-                    j = np.argwhere(self.x_j>=part.x[i])[0][0]
-                except IndexError:
-                    print(part.x[i])
-                    j = Nx
-
-                n[j-1] += (self.x_j[j] - part.x[i])
-                n[j] += (part.x[i] - self.x_j[j-1])
-
-        self.ni /= self.dx**2*self.qf; self.ne /= self.dx**2*self.qf
+        self.ni /= self.dx**2*self.qf
+        self.ne /= self.dx**2*self.qf
         self.rho = self.ni - self.ne
         self.rho *= q
 
