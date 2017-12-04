@@ -42,7 +42,7 @@ class plasma:
                         'Ii_c' : []
                         }
 
-        self.x_j = np.arange(0,Nx+1)*self.Lx/(Nx)
+        self.x_j = np.arange(0,Nx+1, dtype='float64')*self.Lx/(Nx)
         self.dx = self.x_j[1]
 
     def pusher(self):
@@ -50,68 +50,56 @@ class plasma:
         from scipy import interpolate
 
         for sign,part in zip([-1,1],[self.ele,self.ion]):
-            E = [interpolate.interp1d(self.x_j,self.E[:,i]) for i in [0,1,2]]
+            Einterpol = [interpolate.interp1d(self.x_j,self.E[:,i]) for i in [0,1,2]]
             for i in [0,1,2]:
-
-                if False:
-                    #slow calculation
-                    for p in np.arange(part.Npart):
-                        part.V[p,i] -= sign*q/me*self.dT*E[i](part.x[p])
-
-                else:
-                    #fast calculation
-                    try:
-                        part.V[:,i] -= sign*q/me*self.dT*E[i](part.x)
-                    except:
-                        print(part.x,max(part.x),min(part.x),part.V[:,0],self.Lx)
-                        raise ValueError
+                #fast calculation
+                try:
+                    vectE = Einterpol[i](part.x)
+                    part.V[:,i] -= sign*q/part.m*self.dT*vectE
+                except:
+                    print(part.x,max(part.x),min(part.x),part.V[:,0],self.Lx)
+                    raise ValueError
+                    
             part.x += part.V[:,0] *self.dT
 
 
     def boundary(self):
         """look at the postition of the particle, and remove them if they are outside"""
 
+        #mirror reflexion
         for key, part in zip(['Ie_w','Ii_w'],[self.ele,self.ion]):
-            mask = part.x < self.Lx
-            part.x = part.x[mask]
-            part.V = part.V[mask,:]
-            self.history[key].append(np.count_nonzero(mask==0))
+            mask = part.x > self.Lx
+            part.x[mask] = self.Lx - (part.x[mask] - self.Lx)
+            part.V[mask,0] *= -1
+
+            self.history[key].append(np.count_nonzero(mask==1))
 
         for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
             mask = part.x >0
             part.x = part.x[mask]
             part.V = part.V[mask,:]
+
             self.history[key].append(np.count_nonzero(mask==0))
 
-        self.inject_particles(self.history['Ie_w'][-1],self.history['Ii_w'][-1])
+        #self.inject_particles(self.history['Ie_w'][-1],self.history['Ii_w'][-1])
 
-        self.inject_flux(self.history['Ie_c'][-1],self.history['Ii_c'][-1])
+        self.inject_particles(self.history['Ie_c'][-1],self.history['Ii_c'][-1])
+
 
     def inject_particles(self,Ne,Ni):
         """inject particle with maxwellian distribution uniformely in the system"""
 
         #Would be better to add an array of particle, not a single one
-        for i in np.arange(Ne):
-            self.ele.add_uniform_part(Ne)
+        self.ele.add_uniform_vect(Ne)
 
-        for i in np.arange(Ni):
-            self.ion.add_uniform_part(Ni)
+        self.ion.add_uniform_vect(Ni)
 
     def inject_flux(self,Ne,Ni):
         """inject particle with maxwellian distribution uniformely in the system"""
 
         #Would be better to add an array of particle, not a single one
-        for i in np.arange(Ne):
-            self.ele.add_flux_part()
-            self.ele.V[-1,0] *= -1
-            self.ele.x[-1] *= -1
-            self.ele.x[-1] += self.Lx
-
-        for i in np.arange(Ni):
-            self.ion.add_flux_part()
-            self.ion.V[-1,0] *= -1
-            self.ion.x[-1] *= -1
-            self.ion.x[-1] += self.Lx
+        self.ele.add_flux_vect(Ne)
+        self.ion.add_flux_vect(Ni)
 
 
     def compute_rho(self):
