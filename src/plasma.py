@@ -12,7 +12,7 @@ me = 9.109e-31; #[kg] electron mass
 q = 1.6021765650e-19; #[C] electron charge
 kb = 1.3806488e-23;  #Blozman constant
 eps_0 = 8.8548782e-12; #Vaccum permitivitty
-mi = 131*1.6726219e27 #[kg]
+mi = 131*1.6726219e-27 #[kg]
 
 
 class plasma:
@@ -25,6 +25,7 @@ class plasma:
         from .particles import particles as particles
 
         self.Lx = Lx
+        self.Nx = Nx
         self.dT = dT
         self.qf = n*self.Lx/(Npart)
         self.ele = particles(Npart,Te,me,self)
@@ -49,8 +50,10 @@ class plasma:
         """push the particles"""
         from scipy import interpolate
 
+        Einterpol = [interpolate.interp1d(self.x_j,self.E[:,i]) for i in [0,1,2]]
+
         for sign,part in zip([-1,1],[self.ele,self.ion]):
-            Einterpol = [interpolate.interp1d(self.x_j,self.E[:,i]) for i in [0,1,2]]
+
             for i in [0,1,2]:
                 #fast calculation
                 try:
@@ -59,7 +62,7 @@ class plasma:
                 except:
                     print(part.x,max(part.x),min(part.x),part.V[:,0],self.Lx)
                     raise ValueError
-                    
+
             part.x += part.V[:,0] *self.dT
 
 
@@ -123,28 +126,42 @@ class plasma:
         A Phi = -rho/eps0
 
         """
+        try:
+            self.bi
+        except:
+            self.bi = - np.ones(self.Nx+1, dtype = 'float')
+            self.bi[1:-1] *= 2
 
-        di = self.rho/eps_0
+            [self.ai, self.ci ]= np.ones((2,self.Nx+1), dtype = 'float')
+            self.ci[[0,-1]] = 0.
+            self.ai[0] = 0.
 
-        bi = - np.ones(self.Nx+1)
-        bi[1:-2] *= 2
 
-        ai, ci = np.ones(self.Nx+1), np.ones(self.Nx+1)
+            ciprim = np.copy(self.ci) #copy the value, not the reference
+            ciprim[0] /= self.bi[0]
+            for i in np.arange(1,len(ciprim)):
+                ciprim[i] /= self.bi[i] - self.ai[i]*ciprim[i-1]
 
-        ciprim = ci
-        ciprim[0] /= bi[0]
-        for i in np.arange(1,self.Nx+1):
-            ciprim[i] /= bi[i] - ai[i]*ciprim[i-1]
+            self.ciprim = ciprim
 
-        diprim = di
-        diprim[0] /= bi[0]
+        self.rho[[0,-1]] = 0
+        di = - self.rho.copy()/eps_0
 
-        for i in np.arange(1,self.Nx+1):
-            diprim[i] -= ai[i]*diprim[i-1]
-            diprim[i] /= bi[i] - ai[i]*ciprim[i-1]
+        diprim = di.copy()   #copy the values, not the reference
+        diprim[0] /= self.bi[0]
 
+        for i in np.arange(1,len(diprim)):
+            diprim[i] -= self.ai[i]*diprim[i-1]
+            diprim[i] /= self.bi[i] - self.ai[i]*self.ciprim[i-1]
+
+        self.phi[:] = 0
         self.phi[-1] = diprim[-1]
-        for i in np.arange(self.Nx,0):
-            self.phi[i] = diprim[i] - ciprim[i]*self.phi[i+1]
+        #limit conditions
 
+        for i in np.arange(self.Nx-1,1,-1):
+            self.phi[i] = diprim[i] - self.ciprim[i]*self.phi[i+1]
+
+        self.phi *= self.dx**2/q
 #        #Poisson finished
+
+        self.E[:,0] = - np.gradient(self.phi, self.dx)

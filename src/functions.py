@@ -16,10 +16,7 @@ mi = 131*1.6726219e27 #[kg]
 def generate_maxw(T, m):
     import random
     v_Te = np.sqrt(q*T/m)
-
     W = 2
-
-
     while (W >= 1 or W <= 0):
         R1 = (random.random()*2 -1 )
         R2 = (random.random()*2 -1 )
@@ -37,7 +34,6 @@ def velocity_maxw_flux(T, m):
     R = random.random()
     v = (v_Te*np.sqrt(-np.log(R)))
     return v
-
 
 def max_vect(N, T, m):
 
