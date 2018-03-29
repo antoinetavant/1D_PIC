@@ -5,16 +5,12 @@ import scipy as sp
 import astropy
 
 from numba import jit
+import random
 
+from constantes import(me, q,kb,eps_0,mi)
 
-me = 9.109e-31; #[kg] electron mass
-q = 1.6021765650e-19; #[C] electron charge
-kb = 1.3806488e-23;  #Blozman constant
-eps_0 = 8.8548782e-12; #Vaccum permitivitty
-mi = 131*1.6726219e27 #[kg]
-
+@jit('f8(f8,f8)')
 def generate_maxw(T, m):
-    import random
     v_Te = np.sqrt(q*T/m)
     W = 2
     while (W >= 1 or W <= 0):
@@ -48,11 +44,12 @@ def fux_vect(N, T, m):
 @jit('f8[:](i8,f8[:],f8[:],f8[:],f8)')
 def numba_return_density(Np, partx, tabx, n, dx):
 
+
     for i in np.arange(Np):
         j = int(partx[i]/dx)
         deltax = tabx[j] - partx[i]
         n[j-1] += (1 - deltax)
-        n[j] += (deltax)
+        n[j  ] += (    deltax)
 
     return n
 

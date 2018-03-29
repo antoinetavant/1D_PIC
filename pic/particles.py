@@ -4,17 +4,10 @@ import numpy as np
 import scipy as sp
 import astropy
 
-from imp import reload
 from functions import generate_maxw, max_vect, fux_vect, numba_return_density
 from numpy.random import rand
 
-from numba import jit
-
-me = 9.109e-31; #[kg] electron mass
-q = 1.6021765650e-19; #[C] electron charge
-kb = 1.3806488e-23;  #Blozman constant
-eps_0 = 8.8548782e-12; #Vaccum permitivitty
-mi = 131*1.6726219e27 #[kg]
+from constantes import(me, q,kb,eps_0,mi)
 
 
 class particles:
