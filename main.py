@@ -6,77 +6,106 @@ import astropy
 import matplotlib.pyplot as plt
 
 import pic
-
 from pic.plasma import plasma
 from pic.particles import particles
-
 from pic.functions import generate_maxw, velocity_maxw_flux, max_vect, fux_vect, numba_return_density, smooth
 from pic.constantes import (me, q,kb,eps_0,mi)
 
+import pickle
+
 #parameters
 Lx = 1e-2 #System length
-dX = 1e-5 #dX in m
+dX = 0.7e-5 #dX in m
 Nx = int(Lx/dX)+1 #cell number
 Lx = Nx*dX
 print("Nx = {Nx}, and Lx = {Lx} cm".format(Nx = Nx, Lx = Lx*100))
 
-Npart = 50*Nx #particles number, in particle par cell
+Npart = 50*Nx #particles number, calculated via particle par cell
 n = 3e17  #[m^-3]
-dT = 4e-12 #time step
-Te = 30;     #[eV] Electron distribution temperature
-Ti = 5 #[eV]
+dT = 3e-12 #time step
+Te_0 = 30;     #[eV] Electron distribution temperature
+Ti_0 = 5 #[eV]
 
-L_De = np.sqrt(eps_0*Te/(q*n))
+L_De = np.sqrt(eps_0*Te_0/(q*n))
+wpe = np.sqrt(n*q**2/(eps_0*me))
 
-dT = 1e-10 #time step
+print(f"L_de = {L_De*1e3:2.3f} mm, dX = {dX*1e3} mm")
+print(f"time step dT = {dT*1e12:2.2f} mu s, wpe = {wpe**(-1)*1e12:2.2f} mus")
 
-pla = plasma(dT,Nx,Lx,Npart,n,Te,Ti)
-print(len(pla.ele.x),len(pla.ion.x))
+pla = plasma(dT,Nx,Lx,Npart,n,Te_0,Ti_0)
+if not pla.v:
+    exit()
 
-#%%snakeviz
-pla = plasma(dT,Nx,Lx,Npart,n,Te,Ti)
+Nt = 20000
+Do_diags = True
+n_0 = 0#int(Nt/2)
+n_a = 200
 
-Nt = 2000
-plt.plot(smooth(pla.phi),label = "init");
+parts = pla.ele
+
+data = {}
+
+
+#  _______   ______       __        ______     ______   .______     _______.
+# |       \ /  __  \     |  |      /  __  \   /  __  \  |   _  \   /       |
+# |  .--.  |  |  |  |    |  |     |  |  |  | |  |  |  | |  |_)  | |   (----`
+# |  |  |  |  |  |  |    |  |     |  |  |  | |  |  |  | |   ___/   \   \
+# |  '--'  |  `--'  |    |  `----.|  `--'  | |  `--'  | |  |   .----)   |
+# |_______/ \______/     |_______| \______/   \______/  | _|   |_______/
+#
 
 for nt in np.arange(Nt):
-    if nt%10 == 0 : print("\r t = {:2.4f} over {:2.4f} mu s".format(nt*pla.dT*1e6,Nt*pla.dT*1e6),end="")
-    #print("pusher")
+
+    if nt%10 == 0 : print("\r t = {:2.5f} over {:2.5f} mu s".format(nt*pla.dT*1e6,Nt*pla.dT*1e6),end="")
     pla.pusher()
-    #print("bound")
     pla.boundary()
-    #print("rho")
     pla.compute_rho()
-    #print("poisson")
     pla.solve_poisson()
-    #print(len(pla.ele.x),len(pla.ion.x))
 
-plt.plot(smooth(pla.phi),label = "Phi (end)");
+    if Do_diags and nt >= n_0 :
+        #init averages
+        if np.mod(nt - n_0,n_a) ==0 :
+            Te,ve = np.zeros((2,Nx))
+            ne,ni,phi = np.zeros((3,Nx+1))
+            n_diags = 0
 
-plt.legend()
-plt.show()
+        #do the diags
+        n_diags += 1
+        for i in np.arange(Nx):
+            V = parts.V[(parts.x > pla.x_j[i]) & (parts.x < pla.x_j[i]+pla.dx),0]
+            if len(V) > 0:
+                ve[i] += np.mean(V)
+                Te[i] += np.std(V)**2*me/q
+            else:
+                ve[i] += 0
+                Te[i] += 0
+
+        ne += pla.ne
+        ni += pla.ni
+        phi += pla.phi
+
+        #Save data in dictionary if it is the last time step
+        if np.mod(nt - n_0 +1 ,n_a) ==0 :
+            tempdict = {"Te":Te,
+                       "ne":ne,
+                       "ni":ni,
+                       "phi":phi,
+                       "ve":ve}
+            for k,v in tempdict.items():
+                tempdict[k] /= n_diags
+
+            data[str(nt)] = tempdict
+            del tempdict
 
 
-plt.plot(smooth(pla.ne),label = "end elecs");
-plt.plot(smooth(pla.ni),label = "end ions");
-plt.legend()
-print(pla.ne.sum()*Lx,pla.ni.sum()*Lx)
-plt.show()
 
-plt.hist(pla.ele.V[:,0],bins=50, alpha = 0.7,density=True);
-plainit = plasma(dT,Nx,Lx,Npart,n,Te,Ti)
-plt.hist(plainit.ele.V[:,0],bins=50, alpha = 0.7,density=True);
+#
+#      _______.     ___   ____    ____  _______     _______       ___   .___________.    ___
+#     /       |    /   \  \   \  /   / |   ____|   |       \     /   \  |           |   /   \
+#    |   (----`   /  ^  \  \   \/   /  |  |__      |  .--.  |   /  ^  \ `---|  |----`  /  ^  \
+#     \   \      /  /_\  \  \      /   |   __|     |  |  |  |  /  /_\  \    |  |      /  /_\  \
+# .----)   |    /  _____  \  \    /    |  |____    |  '--'  | /  _____  \   |  |     /  _____  \
+# |_______/    /__/     \__\  \__/     |_______|   |_______/ /__/     \__\  |__|    /__/     \__\
 
-plt.show()
 
-plt.plot(pla.history["Ie_w"], label = "Ie")
-plt.plot(pla.history["Ii_w"], label = "Ii")
-plt.legend()
-plt.show()
-
-ve = np.zeros(Nx)
-parts = pla.ion
-for i in np.arange(Nx):
-    ve[i] = np.mean(parts.V[(parts.x > pla.x_j[i]) & (parts.x < pla.x_j[i]+pla.dx),0])
-plt.plot(pla.x_j[:-1],ve)
-plt.show()
+pickle.dump(data,open("data.dat","wb"))

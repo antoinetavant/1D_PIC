@@ -47,7 +47,13 @@ class plasma:
         #Phisical constantes
         self.wpe = np.sqrt(n*q**2/(eps_0*me))
         self.LDe = np.sqrt(eps_0*Te/(q*n))
-        self.print_init()
+        self.v = self.print_init()
+
+        if self.v:
+            print("The initialisation as been validated  !!")
+        else:
+            print("The initialisation as not been validated  :'(")
+
 
     def print_init(self):
         """print some stuffs, upgrade would be a graphic interface
@@ -56,6 +62,10 @@ class plasma:
         print(f"time step dT = {self.dT*1e12:2.2f} 10^-12 s, wpe = {(1/self.wpe)*1e12:2.2f} 10^-12 s")
         print(f"mesh step dX = {self.dx*1e6:2.2f} mu m, LDe = {self.LDe*1e6:2.2f}")
         print(f" Let's go !!")
+
+        V = self.validated()
+
+        return V
 
     def pusher(self):
         """push the particles"""
@@ -175,3 +185,23 @@ class plasma:
         self.phi *= eps_0/(q*self.qf)
          #        #Poisson finished
         self.E[:,0] = - np.gradient(self.phi, self.dx)
+
+    def validated(self):
+        from gui import GUI
+        from tkinter import Tk
+
+        root = Tk()
+        #size of the window
+        root.geometry("400x300")
+        my_gui = GUI(root)
+        str1=f"time step dT = {self.dT*1e12:2.2f} 10^-12 s, wpe = {(1/self.wpe)*1e12:2.2f} 10^-12 s"
+        str2=f"mesh step dX = {self.dx*1e6:2.2f} mu m, LDe = {self.LDe*1e6:2.2f}"
+        my_gui.add_text(str1)
+        my_gui.add_text(str2)
+
+        my_gui.add_button("ok",my_gui.ok)
+        my_gui.add_button("not ok",my_gui.not_ok)
+
+        root.mainloop()
+
+        return my_gui.validated
