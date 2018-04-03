@@ -69,7 +69,7 @@ class particles:
 
         n = np.zeros(len(tabx),dtype='float64')
 
-        return numba_return_density(int(self.Npart), self.x, tabx, n, self.pl.dx)
+        return numba_return_density(len(self.x), self.x, tabx, n, self.pl.dx)
 
     def returnindex(self,x):
         """return the index of the cell where the particle is"""

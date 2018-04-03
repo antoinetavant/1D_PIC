@@ -44,7 +44,6 @@ def fux_vect(N, T, m):
 @jit('f8[:](i8,f8[:],f8[:],f8[:],f8)')
 def numba_return_density(Np, partx, tabx, n, dx):
 
-
     for i in np.arange(Np):
         j = int(partx[i]/dx)
         deltax = tabx[j] - partx[i]

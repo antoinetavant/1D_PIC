@@ -5,7 +5,6 @@ import scipy as sp
 from scipy import interpolate
 import astropy
 
-from imp import reload
 from functions import generate_maxw, velocity_maxw_flux
 from numba import jit
 from constantes import(me, q,kb,eps_0,mi)
@@ -18,11 +17,14 @@ class plasma:
 
         from .particles import particles as particles
 
+        #Parameters
         self.Lx = Lx
         self.Nx = Nx
         self.dT = dT
         self.qf = n*self.Lx/(Npart)
-        self.ele = particles(Npart,Te,me,self)
+
+        #Simulations
+        self.ele = particles(int(Npart*1),Te,me,self)
         self.ion = particles(Npart,Ti,mi,self)
 
         self.E = np.zeros((Nx+1,3))
@@ -41,18 +43,33 @@ class plasma:
         self.dx = self.x_j[1]
 
         self.init_poisson = False
+
+        #Phisical constantes
+        self.wpe = np.sqrt(n*q**2/(eps_0*me))
+        self.LDe = np.sqrt(eps_0*Te/(q*n))
+        self.print_init()
+
+    def print_init(self):
+        """print some stuffs, upgrade would be a graphic interface
+        """
+        print("~~~~~~ Initialisation of Plasma simulation ~~~~~~~~~~")
+        print(f"time step dT = {self.dT*1e12:2.2f} 10^-12 s, wpe = {(1/self.wpe)*1e12:2.2f} 10^-12 s")
+        print(f"mesh step dX = {self.dx*1e6:2.2f} mu m, LDe = {self.LDe*1e6:2.2f}")
+        print(f" Let's go !!")
+
     def pusher(self):
         """push the particles"""
         directions = [0] #0 for X, 1 for Y, 2 for Z
 
-        Einterpol = [interpolate.interp1d(self.x_j,self.E[:,i]) for i in directions]
-
+        #Einterpol = [interpolate.interp1d(self.x_j,self.E[:,i]) for i in directions]
+        #print("interpalation")
+        Einterpol = interpolate.interp1d(self.x_j,self.E[:,0])
         for sign,part in zip([-1,1],[self.ele,self.ion]):
 
             for i in directions:
                 #fast calculation
                 try:
-                    vectE = Einterpol[i](part.x)
+                    vectE = Einterpol(part.x)
                     part.V[:,i] += sign*q/part.m*self.dT*vectE
                 except:
                     print(part.x,max(part.x),min(part.x),part.V[:,0],self.Lx)
@@ -60,28 +77,31 @@ class plasma:
 
             part.x += part.V[:,0] *self.dT
 
-
     def boundary(self):
         """look at the postition of the particle, and remove them if they are outside"""
 
         #mirror reflexion
         for key, part in zip(['Ie_w','Ii_w'],[self.ele,self.ion]):
-            mask = part.x > self.Lx
-            part.x[mask] = self.Lx - (part.x[mask] - self.Lx)
-            part.V[mask,0] *= -1
-
-            self.history[key].append(np.count_nonzero(mask==1))
-
-        for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
-            mask = part.x >0
+            #(key)
+            mask = part.x > 0
             part.x = part.x[mask]
             part.V = part.V[mask,:]
 
             self.history[key].append(np.count_nonzero(mask==0))
 
-        #self.inject_particles(self.history['Ie_w'][-1],self.history['Ii_w'][-1])
+        for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
+            #print(key)
+            mask = part.x > self.Lx
+            part.x[mask] = 2*self.Lx - part.x[mask]
+            part.V[mask,0] *= -1
 
-        self.inject_particles(self.history['Ie_c'][-1],self.history['Ii_c'][-1])
+            self.history[key].append(np.count_nonzero(mask==1))
+
+        #self.inject_particles(self.history['Ie_w'][-1],self.history['Ii_w'][-1])
+        #print("injection")
+        Ncouple = min(self.history['Ie_w'][-1],self.history['Ii_w'][-1])
+        self.inject_particles(0,0)
+        #print("injected")
 
     def inject_particles(self,Ne,Ni):
         """inject particle with maxwellian distribution uniformely in the system"""
@@ -101,9 +121,11 @@ class plasma:
     def compute_rho(self):
         """Compute the plasma density via the invers aera method"""
 
+        #print("calculated density")
         self.ne = self.ele.return_density(self.x_j)
         self.ni = self.ion.return_density(self.x_j)
 
+        #print("dernormalisation")
         denorm = self.qf/self.dx
         self.ni *= denorm
         self.ne *= denorm
