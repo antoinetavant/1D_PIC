@@ -51,7 +51,27 @@ def numba_return_density(Np, partx, tabx, n, dx):
         n[j  ] += (    deltax)
 
     return n
+@jit('f8[:](i8,f8[:],f8[:],f8[:],f8[:],f8)')
+def numba_return_meanv(Np, partx, partv, tabx, mean_v, dx):
 
+    for i in np.arange(Np):
+        j = int(partx[i]/dx)
+        deltax = tabx[j] - partx[i]
+        mean_v[j-1] += (1 - deltax)*partv[i]
+        mean_v[j  ] += (    deltax)*partv[i]
+
+    return mean_v
+
+@jit('f8[:](i8,f8[:],f8[:],f8[:],f8[:],f8)')
+def numba_return_stdv(Np, partx, partv, tabx, std_v, dx):
+
+    for i in np.arange(Np):
+        j = int(partx[i]/dx)
+        deltax = tabx[j] - partx[i]
+        std_v[j-1] += (1 - deltax)*partv[i]**2
+        std_v[j  ] += (    deltax)*partv[i]**2
+
+    return std_v
 
 def smooth(x):
     from scipy.ndimage import gaussian_filter

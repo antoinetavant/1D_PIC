@@ -37,14 +37,9 @@ if not pla.v:
     exit()
 
 Nt = 20000
-Do_diags = True
-n_0 = 0#int(Nt/2)
-n_a = 200
-
-parts = pla.ele
-
-data = {}
-
+pla.Do_diags = True
+pla.n_0 = 0#int(Nt/2)
+pla.n_a = 200
 
 #  _______   ______       __        ______     ______   .______     _______.
 # |       \ /  __  \     |  |      /  __  \   /  __  \  |   _  \   /       |
@@ -61,43 +56,7 @@ for nt in np.arange(Nt):
     pla.boundary()
     pla.compute_rho()
     pla.solve_poisson()
-
-    if Do_diags and nt >= n_0 :
-        #init averages
-        if np.mod(nt - n_0,n_a) ==0 :
-            Te,ve = np.zeros((2,Nx))
-            ne,ni,phi = np.zeros((3,Nx+1))
-            n_diags = 0
-
-        #do the diags
-        n_diags += 1
-        for i in np.arange(Nx):
-            V = parts.V[(parts.x > pla.x_j[i]) & (parts.x < pla.x_j[i]+pla.dx),0]
-            if len(V) > 0:
-                ve[i] += np.mean(V)
-                Te[i] += np.std(V)**2*me/q
-            else:
-                ve[i] += 0
-                Te[i] += 0
-
-        ne += pla.ne
-        ni += pla.ni
-        phi += pla.phi
-
-        #Save data in dictionary if it is the last time step
-        if np.mod(nt - n_0 +1 ,n_a) ==0 :
-            tempdict = {"Te":Te,
-                       "ne":ne,
-                       "ni":ni,
-                       "phi":phi,
-                       "ve":ve}
-            for k,v in tempdict.items():
-                tempdict[k] /= n_diags
-
-            data[str(nt)] = tempdict
-            del tempdict
-
-
+    pla.diags(nt)
 
 #
 #      _______.     ___   ____    ____  _______     _______       ___   .___________.    ___
@@ -108,4 +67,4 @@ for nt in np.arange(Nt):
 # |_______/    /__/     \__\  \__/     |_______|   |_______/ /__/     \__\  |__|    /__/     \__\
 
 
-pickle.dump(data,open("data.dat","wb"))
+pla.save_data()

@@ -5,15 +5,19 @@ import scipy as sp
 from scipy import interpolate
 import astropy
 
-from functions import generate_maxw, velocity_maxw_flux
+import pickle
+
+from functions import generate_maxw, velocity_maxw_flux, numba_return_meanv, numba_return_stdv
 from numba import jit
 from constantes import(me, q,kb,eps_0,mi)
+
+from poisson_solver import Poisson_Solver
 
 
 class plasma:
     """a class with fields, parts, and method to pass from one to the other"""
 
-    def __init__(self,dT,Nx,Lx,Npart,n,Te,Ti):
+    def __init__(self,dT,Nx,Lx,Npart,n,Te,Ti, n_average = 1, n_0 = 0, Do_diags = True):
 
         from .particles import particles as particles
 
@@ -22,6 +26,12 @@ class plasma:
         self.Nx = Nx
         self.dT = dT
         self.qf = n*self.Lx/(Npart)
+        self.n_0 = n_0
+        self.n_average = n_0
+
+        #poisson Solver
+        self.PS = Poisson_Solver(self.Nx, [0])
+        self.PS.init_thomas()
 
         #Simulations
         self.ele = particles(int(Npart*1),Te,me,self)
@@ -33,11 +43,14 @@ class plasma:
         self.ni = np.zeros((Nx+1))
         self.rho = np.zeros((Nx+1))
 
+        self.Do_diags = Do_diags
+
         self.history = {'Ie_w' : [],
                         'Ii_w' : [],
                         'Ie_c' : [],
                         'Ii_c' : []
                         }
+        self.data = {}
 
         self.x_j = np.arange(0,Nx+1, dtype='float64')*self.Lx/(Nx)
         self.dx = self.x_j[1]
@@ -147,44 +160,74 @@ class plasma:
         """solve poisson via the Thomas method :
         A Phi = -rho/eps0
         """
-        if not self.init_poisson:
-            self.bi = - np.ones(self.Nx+1, dtype = 'float')
-            self.bi[1:-1] *= 2
 
-            [self.ai, self.ci ]= np.ones((2,self.Nx+1), dtype = 'float')
-            self.ci[[0,-1]] = 0.
-            self.ai[0] = 0.
+        normed_rho = self.rho*self.dx/(q*self.qf)
 
-            ciprim = np.copy(self.ci) #copy the value, not the reference
-            ciprim[0] /= self.bi[0]
-            for i in np.arange(1,len(ciprim)):
-                ciprim[i] /= self.bi[i] - self.ai[i]*ciprim[i-1]
+        normed_phi = self.PS.thomas_solver( normed_rho, dx = 1., q = 1., qf = 1., eps_0 = 1.)
 
-            self.ciprim = ciprim
-            self.init_poisson = True
-
-        self.rho[[0,-1]] = 0
-
-        di = - self.rho.copy()*self.dx/(q*self.qf)
-        di[0] = 0 /(self.dx) #Boundary condition
-
-        diprim = di.copy()   #copy the values, not the reference
-        diprim[0] /= self.bi[0]
-
-        for i in np.arange(1,len(diprim)):
-            diprim[i] -= self.ai[i]*diprim[i-1]
-            diprim[i] /= self.bi[i] - self.ai[i]*self.ciprim[i-1]
-
-        self.phi[:] = 0
-        self.phi[-1] = diprim[-1]
-        #limit conditions
-
-        for i in np.arange(self.Nx-1,-1,-1):
-            self.phi[i] = diprim[i] - self.ciprim[i]*self.phi[i+1]
-
-        self.phi *= eps_0/(q*self.qf)
+        self.phi = normed_phi*eps_0/(q*self.qf)
          #        #Poisson finished
         self.E[:,0] = - np.gradient(self.phi, self.dx)
+
+    def diags(self, nt):
+        """calculate the average of some values.
+
+        """
+
+        parts = self.ele
+
+        if self.Do_diags and nt >= self.n_0 :
+            #init averages
+            if np.mod(nt - self.n_0,self.n_average) ==0 :
+                self.Te,self.ve = np.zeros((2,self.Nx))
+                self.ne,self.ni,self.phi = np.zeros((3,self.Nx+1))
+                self.n_diags = 0
+
+            #do the diags
+            self.n_diags += 1
+
+            temp_ve = np.zeros(self.Nx)
+            temp_ve = numba_return_meanv(len(parts.x),
+                                      parts.x,
+                                      parts.V[:,0],
+                                      self.x_j,
+                                      temp_ve,
+                                      self.dx)
+
+            temp_Te = np.zeros(self.Nx)
+            temp_Te = numba_return_stdv(len(parts.x),
+                                      parts.x,
+                                      parts.V[:,0],
+                                      self.x_j,
+                                      temp_Te,
+                                      self.dx)
+
+            self.ve += temp_ve
+            self.Te += (temp_Te - temp_ve**2)*me/q
+
+            self.ne += self.ne
+            self.ni += self.ni
+            self.phi += self.phi
+
+            #Save data in dictionary if it is the last time step
+            if np.mod(nt - self.n_0 +1 ,self.n_average) == 0 :
+                tempdict = {"Te":self.Te,
+                           "ne":self.ne,
+                           "ni":self.ni,
+                           "phi":self.phi,
+                           "ve":self.ve}
+                for k,v in tempdict.items():
+                    tempdict[k] /= self.n_diags
+
+                self.data[str(nt)] = tempdict
+                del tempdict, temp_Te, temp_ve
+
+    def save_data(self, filename = "data.dat"):
+        """Save the data of the Simulations"""
+
+        pickle.dump(self.data,open(filename,"wb"))
+
+
 
     def validated(self):
         from gui import GUI
