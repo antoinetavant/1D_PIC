@@ -2,7 +2,7 @@
 
 
 import numpy as np
-
+from functions import numba_thomas_solver
 
 
 class Poisson_Solver(object):
@@ -29,7 +29,13 @@ class Poisson_Solver(object):
 
         [self.ai, self.ci ]= np.ones((2,self.Nx+1), dtype = 'float')
         self.ci[[0,-1]] = 0.
-        self.ai[0] = 0.
+        if True:
+            #Wall at the right also
+            self.ai[[0,-1]] = 0.
+
+        else:
+            #neuman at right boundary condition
+            self.ai[0] = 0.
 
         ciprim = np.copy(self.ci) #copy the value, not the reference
         ciprim[0] /= self.bi[0]
@@ -56,23 +62,10 @@ class Poisson_Solver(object):
         #RHS
         di = - rho.copy()*dx/(q*qf)
         di[0] = 0 /(dx) #Boundary condition
+        if(True):
+            di[-1] = 0 /(dx) #Boundary condition
 
-        diprim = di.copy()   #copy the values, not the reference
-        diprim[0] /= self.bi[0]
-
-        for i in np.arange(1,len(diprim)):
-            diprim[i] -= self.ai[i]*diprim[i-1]
-            diprim[i] /= self.bi[i] - self.ai[i]*self.ciprim[i-1]
-
-        #Init solution
-
-        phi = np.zeros(self.Nx + 1)
-        phi[-1] = diprim[-1]
-        #limit conditions
-
-        #SOLVE
-        for i in np.arange(self.Nx-1,-1,-1):
-            phi[i] = diprim[i] - self.ciprim[i]*phi[i+1]
+        phi = numba_thomas_solver(di,self.ai, self.bi, self.ciprim,self.Nx)
 
         phi *= eps_0/(q*qf)
          #        #Poisson finished

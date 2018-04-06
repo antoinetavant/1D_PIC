@@ -7,7 +7,8 @@ import astropy
 
 import pickle
 
-from functions import generate_maxw, velocity_maxw_flux, numba_return_meanv, numba_return_stdv
+from functions import (numba_interp1D, generate_maxw,numba_interp1D_normed,
+                       velocity_maxw_flux, numba_return_meanv, numba_return_stdv)
 from numba import jit
 from constantes import(me, q,kb,eps_0,mi)
 
@@ -39,8 +40,8 @@ class plasma:
 
         self.E = np.zeros((Nx+1,3))
         self.phi = np.zeros(Nx+1)
-        self.ne = np.zeros((Nx+1))
-        self.ni = np.zeros((Nx+1))
+        self.ne = np.zeros((Nx))
+        self.ni = np.zeros((Nx))
         self.rho = np.zeros((Nx+1))
 
         self.Do_diags = Do_diags
@@ -60,13 +61,12 @@ class plasma:
         #Phisical constantes
         self.wpe = np.sqrt(n*q**2/(eps_0*me))
         self.LDe = np.sqrt(eps_0*Te/(q*n))
-        self.v = self.print_init()
-
+        #self.v = self.print_init()
+        self.v = True
         if self.v:
             print("The initialisation as been validated  !!")
         else:
             print("The initialisation as not been validated  :'(")
-
 
     def print_init(self):
         """print some stuffs, upgrade would be a graphic interface
@@ -86,13 +86,14 @@ class plasma:
 
         #Einterpol = [interpolate.interp1d(self.x_j,self.E[:,i]) for i in directions]
         #print("interpalation")
-        Einterpol = interpolate.interp1d(self.x_j,self.E[:,0])
+        #Einterpol = interpolate.interp1d(self.x_j,self.E[:,0])
         for sign,part in zip([-1,1],[self.ele,self.ion]):
 
             for i in directions:
                 #fast calculation
                 try:
-                    vectE = Einterpol(part.x)
+                    x_mesh = (self.x_j/self.dx).astype(int)
+                    vectE = numba_interp1D_normed(part.x/self.dx,x_mesh,self.E[:,0])
                     part.V[:,i] += sign*q/part.m*self.dT*vectE
                 except:
                     print(part.x,max(part.x),min(part.x),part.V[:,0],self.Lx)
@@ -103,28 +104,55 @@ class plasma:
     def boundary(self):
         """look at the postition of the particle, and remove them if they are outside"""
 
-        #mirror reflexion
+        #wall absorbtion
         for key, part in zip(['Ie_w','Ii_w'],[self.ele,self.ion]):
             #(key)
-            mask = part.x > 0
-            part.x = part.x[mask]
-            part.V = part.V[mask,:]
+            mask = self.get_sup(part.x, 0)
+            self.keep_parts(part,mask)
 
             self.history[key].append(np.count_nonzero(mask==0))
 
-        for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
-            #print(key)
-            mask = part.x > self.Lx
-            part.x[mask] = 2*self.Lx - part.x[mask]
-            part.V[mask,0] *= -1
-
-            self.history[key].append(np.count_nonzero(mask==1))
-
-        #self.inject_particles(self.history['Ie_w'][-1],self.history['Ii_w'][-1])
-        #print("injection")
         Ncouple = min(self.history['Ie_w'][-1],self.history['Ii_w'][-1])
-        self.inject_particles(0,0)
-        #print("injected")
+        self.inject_particles(Ncouple,Ncouple)
+
+        if True: #Boundary condition right : wall
+            for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
+                mask = self.get_inf(part.x,self.Lx)
+                self.keep_parts(part,mask)
+
+                self.history[key].append(np.count_nonzero(mask==0))
+
+            Ncouple = min(self.history['Ie_c'][-1],self.history['Ii_c'][-1])
+            self.inject_particles(Ncouple,Ncouple)
+
+        else: #Mirror refletion
+            for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
+                #print(key)
+                mask = self.get_sup(part.x , self.Lx)
+                self.mirror_parts(part,mask)
+
+                self.history[key].append(np.count_nonzero(mask==1))
+
+
+    def mirror_parts(self,part,mask):
+        '''function to measured performance'''
+        part.x[mask] = 2*self.Lx - part.x[mask]
+        part.V[mask,0] *= -1
+        return
+
+    def keep_parts(self,part,mask):
+        '''function to measured performance'''
+        part.x = part.x[mask]
+        part.V = part.V[mask,:]
+        return
+
+    def get_sup(self,partx, val):
+        '''function to measured performance'''
+        return partx > val
+
+    def get_inf(self,partx,val):
+        '''function to measured performance'''
+        return partx < val
 
     def inject_particles(self,Ne,Ni):
         """inject particle with maxwellian distribution uniformely in the system"""
@@ -180,7 +208,7 @@ class plasma:
             #init averages
             if np.mod(nt - self.n_0,self.n_average) ==0 :
                 self.Te,self.ve = np.zeros((2,self.Nx))
-                self.ne,self.ni,self.phi = np.zeros((3,self.Nx+1))
+                self.temp_ne,self.temp_ni,self.temp_phi = np.zeros((3,self.Nx+1))
                 self.n_diags = 0
 
             #do the diags
@@ -202,19 +230,22 @@ class plasma:
                                       temp_Te,
                                       self.dx)
 
-            self.ve += temp_ve
-            self.Te += (temp_Te - temp_ve**2)*me/q
+            temp_Te /=  (0.1+self.ne[:-1])/( self.qf/self.dx)
+            temp_ve /=  (0.1+self.ne[:-1])/( self.qf/self.dx)
 
-            self.ne += self.ne
-            self.ni += self.ni
-            self.phi += self.phi
+            self.ve += temp_ve
+            self.Te += (temp_Te - temp_ve**2 )*me/q
+
+            self.temp_ne += self.ne
+            self.temp_ni += self.ni
+            self.temp_phi += self.phi
 
             #Save data in dictionary if it is the last time step
             if np.mod(nt - self.n_0 +1 ,self.n_average) == 0 :
                 tempdict = {"Te":self.Te,
-                           "ne":self.ne,
-                           "ni":self.ni,
-                           "phi":self.phi,
+                           "ne":self.temp_ne,
+                           "ni":self.temp_ni,
+                           "phi":self.temp_phi,
                            "ve":self.ve}
                 for k,v in tempdict.items():
                     tempdict[k] /= self.n_diags

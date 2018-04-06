@@ -67,7 +67,7 @@ class particles:
     def return_density(self,tabx):
         """interpolate the density """
 
-        n = np.zeros(len(tabx),dtype='float64')
+        n = np.zeros_like(tabx)
 
         return numba_return_density(len(self.x), self.x, tabx, n, self.pl.dx)
 
