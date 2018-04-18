@@ -1,10 +1,8 @@
 
 
 import numpy as np
-import scipy as sp
-import astropy
-
-from functions import generate_maxw, max_vect, fux_vect, numba_return_density
+ 
+from functions import popout,generate_maxw, max_vect, fux_vect, numba_return_part_diag
 from numpy.random import rand
 
 from constantes import(me, q,kb,eps_0,mi)
@@ -13,12 +11,11 @@ from constantes import(me, q,kb,eps_0,mi)
 class particles:
     """a Class with enouth attribute and methode to deal with particles"""
 
-
     def __init__(self, Npart,T,m,pl ):
 
         self.T = T
         self.m = m
-        self.Npart = Npart
+        self.Npart = int(Npart)
         self.x = np.zeros(Npart, dtype='float64')
         self.V = np.zeros(Npart, dtype='float64')*3
 
@@ -39,10 +36,32 @@ class particles:
 
         self.V = np.array(self.V).reshape((self.Npart,3))
 
+        self.compt_out = 0
+
     def add_uniform_vect(self,N):
-        """Generate one uniforme particle, with maxwellian stuff"""
+        """Generate one uniforme vector of particles,
+         with maxwellian velocities"""
 
         if N > 0:
+            if N <= self.compt_out:
+                To_add = N
+            if N > self.compt_out:
+                To_add = self.compt_out
+            # Fill the laast elemnts with the new ones
+            Nmin = self.Npart - self.compt_out - 1
+            Nmax = self.Npart - self.compt_out - 1 + To_add
+            self.x[Nmin:Nmax] = rand(To_add)*self.pl.Lx
+
+            self.V[Nmin:Nmax,:] = np.array([max_vect(To_add,self.T,self.m),
+                                max_vect(To_add,self.T,self.m),
+                                max_vect(To_add,self.T,self.m)]).T
+
+            N -= To_add
+            self.compt_out -= To_add
+
+        if N > 0:
+            # we are adding to much particles : we need to extend the system
+            self.Npart += N
             self.x = np.append(self.x,rand(N)*self.pl.Lx)
 
             self.V = np.append(self.V,
@@ -62,15 +81,30 @@ class particles:
 
             self.x = np.append(self.x,self.pl.Lx + rand(N)*self.V[-N:,0]*self.pl.dT)
 
-
-
     def return_density(self,tabx):
         """interpolate the density """
 
-        n = np.zeros_like(tabx)
+        n = np.zeros_like(self.pl.rho)
+        Nmax = self.Npart - self.compt_out -1
+        partx = self.x[: Nmax]
+        density  = numba_return_part_diag(len(partx), partx, partx,
+                                          tabx, n, self.pl.dx, power = 0)
 
-        return numba_return_density(len(self.x), self.x, tabx, n, self.pl.dx)
+        return density
 
     def returnindex(self,x):
         """return the index of the cell where the particle is"""
         return int(x/self.pl.dx)
+
+    def remove_parts(self,Lx,bounds = ["w","w"]):
+        """remove the pariclues thar are outside of the systeme, right or left
+
+        The boundary arguments will be used to differe between wall and center (mirror)"""
+
+        total_out = popout(self.x,self.V,Lx)
+
+        this_out = total_out - self.compt_out
+
+        self.compt_out = total_out
+
+        return this_out

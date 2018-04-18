@@ -1,14 +1,12 @@
 
 
 import numpy as np
-import scipy as sp
-from scipy import interpolate
-import astropy
 
 import pickle
 
+from particles import particles
 from functions import (numba_interp1D, generate_maxw,numba_interp1D_normed,
-                       velocity_maxw_flux, numba_return_meanv, numba_return_stdv)
+                       velocity_maxw_flux, numba_return_part_diag)
 from numba import jit
 from constantes import(me, q,kb,eps_0,mi)
 
@@ -20,29 +18,30 @@ class plasma:
 
     def __init__(self,dT,Nx,Lx,Npart,n,Te,Ti, n_average = 1, n_0 = 0, Do_diags = True):
 
-        from .particles import particles as particles
-
         #Parameters
         self.Lx = Lx
         self.Nx = Nx
+        self.N_cells = self.Nx +1
         self.dT = dT
-        self.qf = n*self.Lx/(Npart)
+        self.n = n
+        self.qf = self.n*self.Lx/(Npart)
         self.n_0 = n_0
-        self.n_average = n_0
+        self.n_average = n_average
+
 
         #poisson Solver
-        self.PS = Poisson_Solver(self.Nx, [0])
+        self.PS = Poisson_Solver(self.N_cells, [0])
         self.PS.init_thomas()
 
         #Simulations
-        self.ele = particles(int(Npart*1),Te,me,self)
+        self.ele = particles(Npart,Te,me,self)
         self.ion = particles(Npart,Ti,mi,self)
 
-        self.E = np.zeros((Nx+1,3))
-        self.phi = np.zeros(Nx+1)
-        self.ne = np.zeros((Nx))
-        self.ni = np.zeros((Nx))
-        self.rho = np.zeros((Nx+1))
+        self.E = np.zeros((self.N_cells,3))
+        self.phi = np.zeros(self.N_cells)
+        self.ne = np.zeros((self.N_cells))
+        self.ni = np.zeros((self.N_cells))
+        self.rho = np.zeros((self.N_cells))
 
         self.Do_diags = Do_diags
 
@@ -53,7 +52,8 @@ class plasma:
                         }
         self.data = {}
 
-        self.x_j = np.arange(0,Nx+1, dtype='float64')*self.Lx/(Nx)
+        self.x_j = np.arange(0,self.N_cells, dtype='float64')*self.Lx/(self.N_cells)
+        self.Lx = self.x_j[-1]
         self.dx = self.x_j[1]
 
         self.init_poisson = False
@@ -84,22 +84,23 @@ class plasma:
         """push the particles"""
         directions = [0] #0 for X, 1 for Y, 2 for Z
 
-        #Einterpol = [interpolate.interp1d(self.x_j,self.E[:,i]) for i in directions]
-        #print("interpalation")
-        #Einterpol = interpolate.interp1d(self.x_j,self.E[:,0])
         for sign,part in zip([-1,1],[self.ele,self.ion]):
 
             for i in directions:
                 #fast calculation
                 try:
                     x_mesh = (self.x_j/self.dx).astype(int)
-                    vectE = numba_interp1D_normed(part.x/self.dx,x_mesh,self.E[:,0])
-                    part.V[:,i] += sign*q/part.m*self.dT*vectE
+                    Nmax = part.Npart - part.compt_out
+                    partx = part.x[:Nmax]
+
+                    vectE = numba_interp1D_normed(partx/self.dx,x_mesh,self.E[:,0])
+                    part.V[:Nmax,i] += sign*q/part.m*self.dT*vectE
                 except:
+                    print(part.Npart , part.compt_out)
                     print(part.x,max(part.x),min(part.x),part.V[:,0],self.Lx)
                     raise ValueError
 
-            part.x += part.V[:,0] *self.dT
+            part.x[:Nmax] += part.V[:Nmax,0] *self.dT
 
     def boundary(self):
         """look at the postition of the particle, and remove them if they are outside"""
@@ -107,32 +108,30 @@ class plasma:
         #wall absorbtion
         for key, part in zip(['Ie_w','Ii_w'],[self.ele,self.ion]):
             #(key)
-            mask = self.get_sup(part.x, 0)
-            self.keep_parts(part,mask)
-
-            self.history[key].append(np.count_nonzero(mask==0))
-
-        Ncouple = min(self.history['Ie_w'][-1],self.history['Ii_w'][-1])
-        self.inject_particles(Ncouple,Ncouple)
+            Nout = part.remove_parts(self.Lx)
+            self.history[key].append(Nout)
 
         if True: #Boundary condition right : wall
-            for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
-                mask = self.get_inf(part.x,self.Lx)
-                self.keep_parts(part,mask)
 
-                self.history[key].append(np.count_nonzero(mask==0))
-
-            Ncouple = min(self.history['Ie_c'][-1],self.history['Ii_c'][-1])
+            #Reinject the flux leaving the system
+            Ncouple = min(self.history['Ie_w'][-1],
+                          self.history['Ii_w'][-1])
+            #Reinject to force the ion particle number constante
+            Ncouple = self.ion.compt_out
             self.inject_particles(Ncouple,Ncouple)
 
         else: #Mirror refletion
-            for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
-                #print(key)
-                mask = self.get_sup(part.x , self.Lx)
-                self.mirror_parts(part,mask)
-
-                self.history[key].append(np.count_nonzero(mask==1))
-
+        # THIS IS NOT WORKING !!!!!
+            pass
+            # for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
+            #     #print(key)
+            #     mask = self.get_sup(part.x , self.Lx)
+            #     self.mirror_parts(part,mask)
+            #
+            #     self.history[key].append(np.count_nonzero(mask==1))
+            #
+            #     Ncouple = min(self.history['Ie_w'][-1],self.history['Ii_w'][-1])
+            #     self.inject_particles(Ncouple,Ncouple)
 
     def mirror_parts(self,part,mask):
         '''function to measured performance'''
@@ -140,19 +139,14 @@ class plasma:
         part.V[mask,0] *= -1
         return
 
-    def keep_parts(self,part,mask):
-        '''function to measured performance'''
-        part.x = part.x[mask]
-        part.V = part.V[mask,:]
-        return
-
     def get_sup(self,partx, val):
         '''function to measured performance'''
-        return partx > val
+        try:
+            mask = (partx > val)
+        except RuntimeWarning:
+            print(val,partx)
 
-    def get_inf(self,partx,val):
-        '''function to measured performance'''
-        return partx < val
+        return mask
 
     def inject_particles(self,Ne,Ni):
         """inject particle with maxwellian distribution uniformely in the system"""
@@ -190,6 +184,8 @@ class plasma:
         """
 
         normed_rho = self.rho*self.dx/(q*self.qf)
+        # Boundary configuration
+        normed_rho[[0,-1]] = 0
 
         normed_phi = self.PS.thomas_solver( normed_rho, dx = 1., q = 1., qf = 1., eps_0 = 1.)
 
@@ -199,46 +195,49 @@ class plasma:
 
     def diags(self, nt):
         """calculate the average of some values.
-
         """
-
         parts = self.ele
 
         if self.Do_diags and nt >= self.n_0 :
             #init averages
-            if np.mod(nt - self.n_0,self.n_average) ==0 :
-                self.Te,self.ve = np.zeros((2,self.Nx))
-                self.temp_ne,self.temp_ni,self.temp_phi = np.zeros((3,self.Nx+1))
+            if (nt - self.n_0) % self.n_average ==0 :
+                self.Te,self.ve = np.zeros((2,self.N_cells))
+                self.temp_ne,self.temp_ni,self.temp_phi, self.temp_rho = np.zeros((4,self.N_cells))
                 self.n_diags = 0
 
             #do the diags
             self.n_diags += 1
 
-            temp_ve = np.zeros(self.Nx)
-            temp_ve = numba_return_meanv(len(parts.x),
-                                      parts.x,
-                                      parts.V[:,0],
+            temp_ve = np.zeros(self.N_cells)
+            Nmax = parts.Npart - parts.compt_out -1
+            partsx = parts.x[:Nmax]
+            partV = parts.V[:Nmax,0]
+            temp_ve = numba_return_part_diag(Nmax,
+                                      partsx,
+                                      partV,
                                       self.x_j,
                                       temp_ve,
-                                      self.dx)
+                                      self.dx, power = 1)
 
-            temp_Te = np.zeros(self.Nx)
-            temp_Te = numba_return_stdv(len(parts.x),
-                                      parts.x,
-                                      parts.V[:,0],
+            temp_Te = np.zeros(self.N_cells)
+            temp_Te = numba_return_part_diag(Nmax,
+                                      partsx,
+                                      partV,
                                       self.x_j,
                                       temp_Te,
-                                      self.dx)
+                                      self.dx, power = 2)
 
-            temp_Te /=  (0.1+self.ne[:-1])/( self.qf/self.dx)
-            temp_ve /=  (0.1+self.ne[:-1])/( self.qf/self.dx)
+            old_setting = np.seterr(divide = "ignore")
+            temp_Te /=  parts.Npart/self.N_cells # (self.ne)/( self.qf/self.dx)
+            temp_ve /=  parts.Npart/self.N_cells #(self.ne)/( self.qf/self.dx)
+            np.seterr(**old_setting)
 
             self.ve += temp_ve
             self.Te += (temp_Te - temp_ve**2 )*me/q
-
             self.temp_ne += self.ne
             self.temp_ni += self.ni
             self.temp_phi += self.phi
+            self.temp_rho += self.ni - self.ne
 
             #Save data in dictionary if it is the last time step
             if np.mod(nt - self.n_0 +1 ,self.n_average) == 0 :
@@ -246,19 +245,19 @@ class plasma:
                            "ne":self.temp_ne,
                            "ni":self.temp_ni,
                            "phi":self.temp_phi,
-                           "ve":self.ve}
+                           "ve":self.ve,
+                           "rho":self.temp_rho,
+                           }
                 for k,v in tempdict.items():
                     tempdict[k] /= self.n_diags
-
-                self.data[str(nt)] = tempdict
-                del tempdict, temp_Te, temp_ve
+                self.lastkey = str(nt)
+                self.data[self.lastkey] = tempdict
+                #del tempdict, temp_Te, temp_ve
 
     def save_data(self, filename = "data.dat"):
         """Save the data of the Simulations"""
 
         pickle.dump(self.data,open(filename,"wb"))
-
-
 
     def validated(self):
         from gui import GUI

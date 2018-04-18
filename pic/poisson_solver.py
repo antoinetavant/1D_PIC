@@ -17,17 +17,15 @@ class Poisson_Solver(object):
         """general solver, for Thomas and SOR"""
         pass
 
-
-
     def init_thomas(self):
         """Initialisation of the {b, a, c}_i values, and {c'}_i
 
         """
 
-        self.bi = - np.ones(self.Nx+1, dtype = 'float')
+        self.bi = - np.ones(self.Nx, dtype = 'float')
         self.bi[1:-1] *= 2
 
-        [self.ai, self.ci ]= np.ones((2,self.Nx+1), dtype = 'float')
+        [self.ai, self.ci ]= np.ones((2,self.Nx), dtype = 'float')
         self.ci[[0,-1]] = 0.
         if True:
             #Wall at the right also
@@ -49,29 +47,7 @@ class Poisson_Solver(object):
     def thomas_solver(self, rho, dx = 1., q = 1., qf = 1., eps_0 = 1.):
         """solve phi for Rho using Thomas solver, need initialisation first
         """
-
-        try:
-            self.inited_thomas
-        except NameError:
-            #Need to define thomas Parameters
-            self.init_thomas
-
-        # Boundary configuration
-        rho[[0,-1]] = 0
-
-        #RHS
-        di = - rho.copy()*dx/(q*qf)
-        di[0] = 0 /(dx) #Boundary condition
-        if(True):
-            di[-1] = 0 /(dx) #Boundary condition
-
+        di = - rho #is Rho is normed but not signed
         phi = numba_thomas_solver(di,self.ai, self.bi, self.ciprim,self.Nx)
-
-        phi *= eps_0/(q*qf)
-         #        #Poisson finished
-
-
-
-        E = - np.gradient(phi, dx)
 
         return phi

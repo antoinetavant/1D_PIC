@@ -59,4 +59,12 @@ target/
 
 \.ipynb_checkpoints/
 
-data\.dat
+.pytest*
+
+*.dat
+
+#Ropeproject
+.ropeproject
+
+#Developpement files
+dev.ipynb
