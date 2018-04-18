@@ -18,10 +18,11 @@ We can use it to study interesting 1D kinetic effects such as plasma instabiliti
 
 ### Prerequisites
 This code only uses Python and standard Python modules:
-> Numpy
-> Numba
-> tkinter
-> matplotlib
+> Numpy,
+> Numba,
+> tkinter,
+> matplotlib,
+> Pytest
 
 Because performance is a really big issue, I compared different functions from different modules, but most of the time the fastest solution was to use `Numba.jit`.
 Is is true by example for interpolation and density estimation.
@@ -49,11 +50,14 @@ However, I should specify that this project's main objective is to test solution
 - [ ] GUI for initialisation
 - [x] GUI of the evolution of the simulation
 - [x] diagnostics (data output)
+- [ ] Restars
 
 * Software part
 - [x] Tests
 - [ ] 95 % Coverage
+- [ ] Performance profiling
 - [ ] Continuous integration
+- [ ] Parallelistation
 
 ## Authors
 * [Antoine Tavant](https://github.com/antoinelpp)
