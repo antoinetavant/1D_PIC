@@ -56,10 +56,13 @@ def numba_return_part_diag(Np, partx, partv, tabx, diag, dx, power):
         j = int(partx[i]/dx)
         if j > Jmax:
             j = Jmax
-        deltax = abs(tabx[j] - partx[i])
-        diag[j-1] += (1 - deltax)*info[i]
-        diag[j  ] += (    deltax)*info[i]
+        if i >= 0:
+            deltax = abs(tabx[j] - partx[i])
+            diag[j-1] += (1 - deltax)*info[i]
+            diag[j  ] += (    deltax)*info[i]
 
+        else :
+            print("i = "+str(i)+' over Np = '+str(Np)+" and partx[i] = "+str(partx[i]))
     return diag
 
 @jit('f8[:](i8,f8[:],f8[:],f8[:],f8)')

@@ -12,6 +12,7 @@ from constantes import(me, q,kb,eps_0,mi)
 
 from poisson_solver import Poisson_Solver
 
+import h5py
 
 class plasma:
     """a class with fields, parts, and method to pass from one to the other"""
@@ -259,6 +260,28 @@ class plasma:
 
         pickle.dump(self.data,open(filename,"wb"))
 
+
+    def save_data_HDF5(self,filename = "data.h5", toopen = True):
+
+        if toopen : self.f = h5py.File(filename, 'a')
+
+        groupname = self.lastkey
+        grp = self.f.create_group(groupname)
+
+        data_dic = self.data[groupname]
+        for k,v in data_dic.items():
+            dset = grp.create_dataset(k, data = v)
+
+
+    def create_filename(self,filename = "data", term = "h5"):
+        """check the existence of a file.
+         If it exists, change the name
+         """
+        import os.path
+        if os.path.isfile(filename+"."+term):
+            filename += "2"
+
+        return filename + "." + term
     def validated(self):
         from gui import GUI
         from tkinter import Tk
