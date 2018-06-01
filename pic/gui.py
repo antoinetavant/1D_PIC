@@ -42,10 +42,11 @@ from numba import jit
 class LivePlot():
     """Object that help the plot of the informations """
 
-    def __init__(self, tab_x, strList = ["ne"]):
+    def __init__(self, tab_x, tab_v, strList = ["ne"]):
         """init all """
 
         self.tabx = tab_x
+        self.tabv = tab_v
         self.strList = strList
         self.Nplots = len(self.strList)
         self.Nrows = 2
@@ -80,11 +81,12 @@ class LivePlot():
 
         return fig, np.array(axarr)
 
-    def updatevalue(self,data, nt, Nt, dT):
+    def updatevalue(self, data, nt, Nt, dT):
 
-        for line, st in zip(self.Lines, self.strList):
+        for line, st in zip(self.Lines[:-1], self.strList[:-1]):
             line.set_data(self.tabx, smooth(data[st]))
 
+        self.Lines[-1].set_data(self.tabv, smooth(data["hist"]))
 
         plt.suptitle(f"Nt = {nt:1.1e} over {Nt:1.1e}, t = {nt*dT*1e6:2.2e} $\mu s$", fontsize=12)
         plt.draw()

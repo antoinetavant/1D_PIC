@@ -36,7 +36,7 @@ class plasma:
 
         #Simulations
         self.ele = particles(Npart,Te,me,self)
-        self.ion = particles(Npart,Ti,mi,self)
+        self.ion = particles(2,Ti,mi,self)
 
         self.E = np.zeros((self.N_cells,3))
         self.phi = np.zeros(self.N_cells)
@@ -103,27 +103,26 @@ class plasma:
 
             part.x[:Nmax] += part.V[:Nmax,0] *self.dT
 
-    def boundary(self):
+    def boundary(self, absorbtion = True):
         """look at the postition of the particle, and remove them if they are outside"""
 
-        #wall absorbtion
-        for key, part in zip(['Ie_w','Ii_w'],[self.ele,self.ion]):
-            #(key)
-            Nout = part.remove_parts(self.Lx)
-            self.history[key].append(Nout)
+        if absorbtion:  # Boundary condition right : wall
+            # wall absorbtion
+            for key, part in zip(['Ie_w', 'Ii_w'], [self.ele, self.ion]):
+                Nout = part.remove_parts(self.Lx)
+                self.history[key].append(Nout)
 
-        if True: #Boundary condition right : wall
-
-            #Reinject the flux leaving the system
+            # Reinject the flux leaving the system
             Ncouple = min(self.history['Ie_w'][-1],
                           self.history['Ii_w'][-1])
-            #Reinject to force the ion particle number constante
+            # Reinject to force the ion particle number constante
             Ncouple = self.ion.compt_out
-            self.inject_particles(Ncouple,Ncouple)
+            self.inject_particles(Ncouple, Ncouple)
 
-        else: #Mirror refletion
-        # THIS IS NOT WORKING !!!!!
-            pass
+        else:  # Mirror refletion
+            for part in [self.ele, self.ion]:
+                part.mirror_parts(self.Lx)
+
             # for key, part in zip(['Ie_c','Ii_c'],[self.ele,self.ion]):
             #     #print(key)
             #     mask = self.get_sup(part.x , self.Lx)
@@ -178,7 +177,6 @@ class plasma:
         self.rho = self.ni - self.ne
         self.rho *= q
 
-
     def solve_poisson(self):
         """solve poisson via the Thomas method :
         A Phi = -rho/eps0
@@ -186,79 +184,96 @@ class plasma:
 
         normed_rho = self.rho*self.dx/(q*self.qf)
         # Boundary configuration
-        normed_rho[[0,-1]] = 0
+        normed_rho[[0, -1]] = 0
 
-        normed_phi = self.PS.thomas_solver( normed_rho, dx = 1., q = 1., qf = 1., eps_0 = 1.)
+        normed_phi = self.PS.thomas_solver(normed_rho, dx=1., q=1.,
+                                           qf=1., eps_0=1.)
 
         self.phi = normed_phi*eps_0/(q*self.qf)
-         #        #Poisson finished
-        self.E[:,0] = - np.gradient(self.phi, self.dx)
+        #        Poisson finished
+        self.E[:, 0] = - np.gradient(self.phi, self.dx)
 
     def diags(self, nt):
         """calculate the average of some values.
         """
         parts = self.ele
+        Nbins = 100
+        if self.Do_diags and nt >= self.n_0:
+            # init averages
 
-        if self.Do_diags and nt >= self.n_0 :
-            #init averages
-            if (nt - self.n_0) % self.n_average ==0 :
-                self.Te,self.ve = np.zeros((2,self.N_cells))
-                self.temp_ne,self.temp_ni,self.temp_phi, self.temp_rho = np.zeros((4,self.N_cells))
+            if nt == self.n_0:
+                self.hist_ele_range = [self.ele.V[:, 0].min(),
+                                       self.ele.V[:, 0].max()]
+                tempHist, _ = np.histogram(self.ele.V[:, 0], bins=Nbins,
+                                           range=self.hist_ele_range)
+
+                self.hist_ele = np.array(tempHist, dtype="float")
+                self.hist_ele_0 = self.hist_ele
+
+            if (nt - self.n_0) % self.n_average == 0:
+                self.Te, self.ve = np.zeros((2, self.N_cells))
+                (self.temp_ne, self.temp_ni, self.temp_phi,
+                 self.temp_rho) = np.zeros((4, self.N_cells))
                 self.n_diags = 0
 
-            #do the diags
+            # do the diags
             self.n_diags += 1
 
             temp_ve = np.zeros(self.N_cells)
-            Nmax = parts.Npart - parts.compt_out -1
+            Nmax = parts.Npart - parts.compt_out - 1
             partsx = parts.x[:Nmax]
-            partV = parts.V[:Nmax,0]
+            partV = parts.V[:Nmax, 0]
             temp_ve = numba_return_part_diag(Nmax,
-                                      partsx,
-                                      partV,
-                                      self.x_j,
-                                      temp_ve,
-                                      self.dx, power = 1)
+                                             partsx,
+                                             partV,
+                                             self.x_j,
+                                             temp_ve,
+                                             self.dx, power=1)
 
             temp_Te = np.zeros(self.N_cells)
             temp_Te = numba_return_part_diag(Nmax,
-                                      partsx,
-                                      partV,
-                                      self.x_j,
-                                      temp_Te,
-                                      self.dx, power = 2)
+                                             partsx,
+                                             partV,
+                                             self.x_j,
+                                             temp_Te,
+                                             self.dx, power=2)
 
-            old_setting = np.seterr(divide = "ignore")
-            temp_Te /=  parts.Npart/self.N_cells # (self.ne)/( self.qf/self.dx)
-            temp_ve /=  parts.Npart/self.N_cells #(self.ne)/( self.qf/self.dx)
+            old_setting = np.seterr(divide="ignore")
+            temp_Te /= parts.Npart/self.N_cells  # (self.ne)/( self.qf/self.dx)
+            temp_ve /= parts.Npart/self.N_cells  # (self.ne)/( self.qf/self.dx)
             np.seterr(**old_setting)
 
             self.ve += temp_ve
-            self.Te += (temp_Te - temp_ve**2 )*me/q
+            self.Te += (temp_Te - temp_ve**2)*me/q
             self.temp_ne += self.ne
             self.temp_ni += self.ni
             self.temp_phi += self.phi
             self.temp_rho += self.ni - self.ne
+            tempHist, _ = np.histogram(self.ele.V[:, 0], bins=Nbins,
+                                       range=self.hist_ele_range)
+            self.hist_ele += np.array(tempHist, dtype="float")
+            # Save data in dictionary if it is the last time step
+            if np.mod(nt - self.n_0 + 1, self.n_average) == 0:
+                tempdict = {"Te": self.Te,
+                            "ne": self.temp_ne,
+                            "ni": self.temp_ni,
+                            "phi": self.temp_phi,
+                            "ve": self.ve,
+                            #"rho": self.temp_rho,
+                            "hist": self.hist_ele,
+                            }
 
-            #Save data in dictionary if it is the last time step
-            if np.mod(nt - self.n_0 +1 ,self.n_average) == 0 :
-                tempdict = {"Te":self.Te,
-                           "ne":self.temp_ne,
-                           "ni":self.temp_ni,
-                           "phi":self.temp_phi,
-                           "ve":self.ve,
-                           "rho":self.temp_rho,
-                           }
-                for k,v in tempdict.items():
+                for k, v in tempdict.items():
+                    # print(type(tempdict[k]))
                     tempdict[k] /= self.n_diags
                 self.lastkey = str(nt)
                 self.data[self.lastkey] = tempdict
-                #del tempdict, temp_Te, temp_ve
+                # del tempdict, temp_Te, temp_ve
 
-    def save_data(self, filename = "data.dat"):
+    def save_data(self, filename="data.dat"):
         """Save the data of the Simulations"""
 
-        pickle.dump(self.data,open(filename,"wb"))
+        pickle.dump(self.data, open(filename, "wb"))
 
 
     def save_data_HDF5(self,filename = "data.h5", toopen = True):

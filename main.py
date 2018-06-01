@@ -23,7 +23,7 @@ Nx = int(Lx/dX) #cell number
 Lx = Nx*dX
 print("Nx = {Nx}, and Lx = {Lx} cm".format(Nx = Nx, Lx = Lx*100))
 
-Npart = 10*Nx #particles number, calculated via particle par cell
+Npart = 60*Nx #particles number, calculated via particle par cell
 n = 3e17  #[m^-3]
 dT = 3e-12 #time step
 Te_0 = 50;     #[eV] Electron distribution temperature
@@ -41,14 +41,14 @@ try:
     pla = pickle.load(open(restartFileName,"rb"))
 except:
     print("\n restart not found : initialisation   ")
-    pla = plasma(dT,Nx,Lx,Npart,n,Te_0,Ti_0,n_average = 2000)
+    pla = plasma(dT, Nx, Lx, Npart, n, Te_0, Ti_0, n_average=2000)
 
 if not pla.v:
     exit()
 
 Nt = int(2e-6/dT)
 pla.Do_diags = True
-pla.n_0 = 0#int(Nt/2)
+pla.n_0 = 0  # int(Nt/2)
 
 doPlots = False
 
@@ -60,24 +60,23 @@ doPlots = False
 # |_______/ \______/     |_______| \______/   \______/  | _|   |_______/
 #
 
-tabstr = ["phi", "Te","ni","ne", "ve", "rho"]
+tabstr = ["phi", "Te", "ni", "ne", "ve", "rho"]
 if doPlots:
-    PlotObject = LivePlot(pla.x_j,tabstr )
+    PlotObject = LivePlot(pla.x_j, tabstr)
 
-    limites = { 'phi':[-10,150],
-               "ni":[0,4.5e17],
-               "ne":[0,4e17],
-               "Te":[0,50],
-               "ve":[-3e5,3e5],
-               "rho":[-1e17, 2e17],
+    limites = {'phi': [-10, 150],
+               "ni": [0, 4.5e17],
+               "ne": [0, 4e17],
+               "Te": [0, 50],
+               "ve": [-3e5, 3e5],
+               "rho": [-1e17, 2e17],
                }
     for ax, st in zip(PlotObject.axarr, tabstr):
         ax.set_ylim(*limites[st])
 
     plt.show()
 
-dataFileName = pla.create_filename("data/run1","h5")
-
+dataFileName = pla.create_filename("data/run5", "h5")
 
 
 for nt in np.arange(Nt):
@@ -87,12 +86,13 @@ for nt in np.arange(Nt):
     pla.solve_poisson()
     pla.diags(nt)
 
-    if np.mod(nt - pla.n_0 +1 ,pla.n_average) == 0 :
+    if np.mod(nt - pla.n_0 + 1, pla.n_average) == 0 :
         toopen = True if nt < pla.n_average else False
         pla.save_data_HDF5(dataFileName, True )
 
         #try:
-        if doPlots: PlotObject.updatevalue(pla.data[ pla.lastkey], nt, Nt, dT)
+        if doPlots:
+            PlotObject.updatevalue(pla.data[pla.lastkey], nt, Nt, dT)
         # except:
             # print(len(pla.x_j),len(pla.data[pla.lastkey]["phi"]),len(pla.data[pla.lastkey]["ni"]),len(pla.data[pla.lastkey]["ne"]))
 

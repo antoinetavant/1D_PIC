@@ -1,17 +1,16 @@
 
 
 import numpy as np
- 
-from functions import popout,generate_maxw, max_vect, fux_vect, numba_return_part_diag
-from numpy.random import rand
 
-from constantes import(me, q,kb,eps_0,mi)
+from functions import (popout, max_vect, fux_vect,
+                       numba_return_part_diag, mirror_vect)
+from numpy.random import rand
 
 
 class particles:
     """a Class with enouth attribute and methode to deal with particles"""
 
-    def __init__(self, Npart,T,m,pl ):
+    def __init__(self, Npart, T, m, pl):
 
         self.T = T
         self.m = m
@@ -26,19 +25,18 @@ class particles:
     def init_part(self):
         """Generate uniforme particle, with maxwellian stuff"""
 
-        from random import random
         from numpy.random import rand
         self.x = rand(self.Npart)*self.pl.Lx
 
-        self.V = [max_vect(self.Npart,self.T,self.m),
-                  max_vect(self.Npart,self.T,self.m),
-                  max_vect(self.Npart,self.T,self.m)]
+        self.V = [max_vect(self.Npart, self.T, self.m),
+                  max_vect(self.Npart, self.T, self.m),
+                  max_vect(self.Npart, self.T, self.m)]
 
-        self.V = np.array(self.V).reshape((self.Npart,3))
+        self.V = np.array(self.V).reshape((self.Npart, 3))
 
         self.compt_out = 0
 
-    def add_uniform_vect(self,N):
+    def add_uniform_vect(self, N):
         """Generate one uniforme vector of particles,
          with maxwellian velocities"""
 
@@ -52,9 +50,10 @@ class particles:
             Nmax = self.Npart - self.compt_out - 1 + To_add
             self.x[Nmin:Nmax] = rand(To_add)*self.pl.Lx
 
-            self.V[Nmin:Nmax,:] = np.array([max_vect(To_add,self.T,self.m),
-                                max_vect(To_add,self.T,self.m),
-                                max_vect(To_add,self.T,self.m)]).T
+            self.V[Nmin:Nmax, :] = np.array([max_vect(To_add, self.T, self.m),
+                                             max_vect(To_add, self.T, self.m),
+                                             max_vect(To_add, self.T, self.m)]
+                                            ).T
 
             N -= To_add
             self.compt_out -= To_add
@@ -62,24 +61,25 @@ class particles:
         if N > 0:
             # we are adding to much particles : we need to extend the system
             self.Npart += N
-            self.x = np.append(self.x,rand(N)*self.pl.Lx)
+            self.x = np.append(self.x, rand(N)*self.pl.Lx)
 
             self.V = np.append(self.V,
-                               np.array([max_vect(N,self.T,self.m),
-                                max_vect(N,self.T,self.m),
-                                max_vect(N,self.T,self.m)]).T,
-                                axis=0)
+                               np.array([max_vect(N, self.T, self.m),
+                                         max_vect(N, self.T, self.m),
+                                         max_vect(N, self.T, self.m)]
+                                        ).T, axis=0)
 
     def add_flux_vect(self,N):
         """ add N particle as flux ion the X direction"""
         if N > 0:
             self.V = np.append(self.V,
-                                np.array([-fux_vect(N,self.T, self.m),
-                                max_vect(N,self.T, self.m),
-                                max_vect(N,self.T, self.m)]).T,
-                                axis=0)
+                               np.array([-fux_vect(N, self.T, self.m),
+                                         max_vect(N, self.T, self.m),
+                                         max_vect(N, self.T, self.m)]
+                                        ).T, axis=0)
 
-            self.x = np.append(self.x,self.pl.Lx + rand(N)*self.V[-N:,0]*self.pl.dT)
+            self.x = np.append(self.x,
+                               self.pl.Lx + rand(N)*self.V[-N:, 0]*self.pl.dT)
 
     def return_density(self,tabx):
         """interpolate the density """
@@ -87,8 +87,8 @@ class particles:
         n = np.zeros_like(self.pl.rho)
         Nmax = self.Npart - self.compt_out -1
         partx = self.x[: Nmax]
-        density  = numba_return_part_diag(len(partx), partx, partx,
-                                          tabx, n, self.pl.dx, power = 0)
+        density = numba_return_part_diag(len(partx), partx, partx,
+                                         tabx, n, self.pl.dx, power=0)
 
         return density
 
@@ -99,12 +99,25 @@ class particles:
     def remove_parts(self,Lx,bounds = ["w","w"]):
         """remove the pariclues thar are outside of the systeme, right or left
 
-        The boundary arguments will be used to differe between wall and center (mirror)"""
+        The boundary arguments will be used to differe between wall and center
+        (mirror)
+        """
 
-        total_out = popout(self.x,self.V,Lx)
+        total_out = popout(self.x, self.V, Lx)
 
         this_out = total_out - self.compt_out
 
         self.compt_out = total_out
 
         return this_out
+
+    def mirror_parts(self, Lx, bounds=["w", "w"]):
+        """remove the pariclues thar are outside of the systeme, right or left
+
+        The boundary arguments will be used to differe between wall and center
+        (mirror)
+        """
+
+        iout = mirror_vect(self.x, self.V, Lx)
+
+        return iout
