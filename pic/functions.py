@@ -228,7 +228,7 @@ def popout(x, V, val):
     N = len(x)-1
     zeros = np.zeros(3)
     # linear search from the end of the table
-    for i in np.arange(N, 0, -1):
+    for i in np.arange(N, -1, -1):
         pos = x[i]
         if V[i, 1] == 0.0:
             compt += 1

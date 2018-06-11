@@ -6,12 +6,11 @@ import astropy
 
 import matplotlib.pyplot as plt
 
-
 import pic
 from pic.plasma import plasma
 from pic.particles import particles
-from pic.functions import (generate_maxw, velocity_maxw_flux, max_vect, fux_vect,
-                           numba_return_density, smooth)
+from pic.functions import (generate_maxw, velocity_maxw_flux, max_vect,
+                           fux_vect, numba_return_density, smooth)
 from pic.constantes import (me, q, kb, eps_0, mi)
 
 from pic.gui import LivePlot
@@ -35,16 +34,17 @@ Ti_0 = 1    # [eV]
 pla = plasma(dT, Nx, Lx, Npart, n, Te_0, Ti_0, n_average=2000, n_0=0)
 
 petitevalue = 1e-5
-phi_max = -3*Te_0
+phi_max = -4*Te_0
 shapefactor = 0.1
 # pla.phi = 1/(shapefactor*pla.x_j+petitevalue) - 1/(
 #     - petitevalue + shapefactor*(pla.x_j - pla.x_j[-1]))
-pla.phi = (pla.x_j-pla.x_j[int(len(pla.x_j)/2)])**2
+pla.phi = (pla.x_j-pla.x_j[int(len(pla.x_j)/2)])**8
 
 pla.phi /= abs(pla.phi).max()
 pla.phi *= phi_max
 pla.E[:, 0] = - np.gradient(pla.phi, pla.dx)
-if False:
+
+if True:
     plt.plot(pla.x_j, pla.phi)
     plt.show()
 
@@ -53,14 +53,8 @@ pla.Do_diags = True
 pla.n_0 = 0  # int(Nt/2)
 
 doPlots = True
-restartFileName = "cases/inft_sh/restart_pla.dat"
-#  _______   ______       __        ______     ______   .______     _______.
-# |       \ /  __  \     |  |      /  __  \   /  __  \  |   _  \   /       |
-# |  .--.  |  |  |  |    |  |     |  |  |  | |  |  |  | |  |_)  | |   (----`
-# |  |  |  |  |  |  |    |  |     |  |  |  | |  |  |  | |   ___/   \   \
-# |  '--'  |  `--'  |    |  `----.|  `--'  | |  `--'  | |  |   .----)   |
-# |_______/ \______/     |_______| \______/   \______/  | _|   |_______/
-#
+restartFileName = "restart_pla.dat"
+
 
 tabstr = ["phi", "Te",  "ne", "ve", "Qe", "hist"]
 if doPlots:
@@ -80,7 +74,7 @@ if doPlots:
         ax.set_ylim(*limites[st])
     plt.show()
 
-dataFileName = pla.create_filename("cases/inft_sh/center_parabol", "h5")
+dataFileName = pla.create_filename("run1", "h5")
 
 pla.ele.x[:] = float(pla.x_j[int(Nx/2)]) + (
     np.random.rand(pla.ele.x.size,)-0.5)*Lx/4
@@ -89,8 +83,13 @@ pla.ion.x[:] = float(pla.x_j[int(Nx/2)])
 
 PlotObject.axarr[-1].set_xlim([pla.ele.V[:, 0].min(), pla.ele.V[:, 0].max()])
 
-pla.ele.remove_parts(-5)  # remove all elecs
-pla.ele.add_uniform_vect(0)  # add just 1k elecs
+#  _______   ______       __        ______     ______   .______     _______.
+# |       \ /  __  \     |  |      /  __  \   /  __  \  |   _  \   /       |
+# |  .--.  |  |  |  |    |  |     |  |  |  | |  |  |  | |  |_)  | |   (----`
+# |  |  |  |  |  |  |    |  |     |  |  |  | |  |  |  | |   ___/   \   \
+# |  '--'  |  `--'  |    |  `----.|  `--'  | |  `--'  | |  |   .----)   |
+# |_______/ \______/     |_______| \______/   \______/  | _|   |_______/
+#
 
 for nt in np.arange(Nt):
     Nelec = pla.ele.Npart - pla.ele.compt_out
@@ -105,7 +104,7 @@ for nt in np.arange(Nt):
 
     if np.mod(nt - pla.n_0 + 1, pla.n_average) == 0:
         if nt < 20*pla.n_average and nt > 19*pla.n_average:
-            pass  # PlotObject.axarr[-1].plot(vtab, pla.data[pla.lastkey]["hist"], "k")
+            PlotObject.axarr[-1].plot(vtab, pla.data[pla.lastkey]["hist"], "k")
 
         toopen = True if nt < pla.n_average else False
         pla.save_data_HDF5(dataFileName, True)
@@ -117,7 +116,8 @@ for nt in np.arange(Nt):
             # print(len(pla.x_j),len(pla.data[pla.lastkey]["phi"]),len(pla.data[pla.lastkey]["ni"]),len(pla.data[pla.lastkey]["ne"]))
 
         print("\r t = {:2.5f} over {:2.5f} mu s, with {:2.2e} elecs".format(
-            nt*pla.dT*1e6, Nt*pla.dT*1e6, pla.ele.Npart - pla.ele.compt_out), end="")
+             nt*pla.dT*1e6, Nt*pla.dT*1e6,
+             pla.ele.Npart - pla.ele.compt_out), end="")
 
         if np.mod(nt - pla.n_0 + 1, 100*pla.n_average) == 0:
             pickle.dump(pla, open(restartFileName, 'wb'))
