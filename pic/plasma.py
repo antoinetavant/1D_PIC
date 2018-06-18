@@ -18,6 +18,7 @@ class plasma:
                  n_average=1,
                  n_0=0,
                  Do_diags=True,
+                 floating_boundary = False,
                  ):
 
         # Parameters
@@ -33,6 +34,7 @@ class plasma:
         # poisson Solver
         self.PS = Poisson_Solver(self.N_cells, [0])
         self.PS.init_thomas()
+        self.floating_boundary = floating_boundary
 
         # Simulations
         self.ele = particles(Npart, Te, me, self)
@@ -179,16 +181,24 @@ class plasma:
     def solve_poisson(self):
         """solve poisson via the Thomas method :
         A Phi = -rho/eps0
+
+        normalisation :
+        phi_normd = phi*eps0*dx*(q*qf)
+        rho_normed = rho*dx /(q*qf)
         """
 
         normed_rho = self.rho*self.dx/(q*self.qf)
         # Boundary configuration
         normed_rho[[0, -1]] = 0
 
+        if self.floating_boundary:
+            totalCharge = normed_rho.sum()
+            normed_rho[-1] =  -totalCharge
+
         normed_phi = self.PS.thomas_solver(normed_rho, dx=1., q=1.,
                                            qf=1., eps_0=1.)
 
-        self.phi = normed_phi*eps_0/(q*self.qf)
+        self.phi = normed_phi/eps_0*(q*self.qf)*self.dx
         #        Poisson finished
         self.E[:, 0] = - np.gradient(self.phi, self.dx)
 

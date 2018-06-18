@@ -17,7 +17,7 @@ class Poisson_Solver(object):
         """general solver, for Thomas and SOR"""
         pass
 
-    def init_thomas(self):
+    def init_thomas(self, both_grounded = True):
         """Initialisation of the {b, a, c}_i values, and {c'}_i
 
         """
@@ -26,8 +26,10 @@ class Poisson_Solver(object):
         self.bi[1:-1] *= 2
 
         [self.ai, self.ci ]= np.ones((2,self.Nx), dtype = 'float')
+        # ci[0] = 0 for left derichel condtion
+        # ci[-1] = 0 useless but to be sure
         self.ci[[0,-1]] = 0.
-        if True:
+        if both_grounded:
             #Wall at the right also
             self.ai[[0,-1]] = 0.
 
