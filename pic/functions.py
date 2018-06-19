@@ -13,7 +13,7 @@ numbaparallel = False
 
 @jit('f8(f8,f8)')
 def generate_maxw(T, m):
-
+    """Generate a scalar following one Maxwellian distribution function """
     v_Te = np.sqrt(q*T/m)
     W = 2
     while (W >= 1 or W <= 0):
@@ -28,6 +28,7 @@ def generate_maxw(T, m):
 
 
 def velocity_maxw_flux(T, m):
+    """ Generate one zcalar folowing a maxwellian flux distribution function"""
     import random
     v_Te = np.sqrt(q*T/m)
 
@@ -37,11 +38,13 @@ def velocity_maxw_flux(T, m):
 
 
 def max_vect(N, T, m):
-
+    """Generate an array of scalar folowing a Maxwellian DF"""
     return np.array([generate_maxw(T, m) for i in np.arange(N)])
 
 
 def fux_vect(N, T, m):
+    """Generate an array of scalar folowing a Maxwellian flux DF"""
+
     from numpy.random import rand
     v_Te = np.sqrt(q*T/m)
 
@@ -76,13 +79,15 @@ def numba_return_part_diag(Np, partx, partv, tabx, diag, dx, power):
         j = int(partx[i]/dx)
         if j > Jmax:
             j = Jmax
+
         if i >= 0 and j >= 0:
             deltax = abs(tabx[j] - partx[i])
             diag[j-1] += (1 - deltax)*info[i]
             diag[j] += deltax * info[i]
 
         else:
-            print("i = ", i, ' over Np = ', Np, " and partx[i] = ", partx[i])
+            pass
+            #  print("i = ", i, ' over Np = ', Np, " and partx[i] = ", partx[i], j, Jmax)
     return diag
 
 
@@ -233,7 +238,7 @@ def popout(x, V, val):
         if V[i, 1] == 0.0:
             compt += 1
         else:
-            if (pos >= val) or (pos <= 0.0):  # Condition to move the
+            if (pos >= val):  # Condition to move the
                                             # element at the end
                 # exchange the current element with the last
                 tmp = x[N - compt - 1]

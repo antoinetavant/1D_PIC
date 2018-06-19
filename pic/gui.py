@@ -84,10 +84,8 @@ class LivePlot():
 
     def updatevalue(self, data, nt, Nt, dT):
 
-        for line, st in zip(self.Lines[:-1], self.strList[:-1]):
+        for line, st in zip(self.Lines, self.strList):
             line.set_data(self.tabx, smooth(data[st]))
-
-        self.Lines[-1].set_data(self.tabv, smooth(data["hist"]))
 
         plt.suptitle("Nt = {:1.1e} over {:1.1e}, ".format(nt, Nt) +
                      "t = {:2.2e} $\\mu s$".format(nt*dT*1e6), fontsize=12)

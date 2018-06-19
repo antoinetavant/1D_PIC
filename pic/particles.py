@@ -36,7 +36,7 @@ class particles:
 
         self.compt_out = 0
 
-    def add_uniform_vect(self, N):
+    def add_uniform_vect(self, N, flag):
         """Generate one uniforme vector of particles,
          with maxwellian velocities"""
 
@@ -50,8 +50,11 @@ class particles:
             Nmin = self.Npart - self.compt_out - 1
             Nmax = self.Npart - self.compt_out - 1 + To_add
 
-            if True:
+            if flag == 1 or flag == 2:
                 x_tmp = rand(To_add)*self.pl.Lx
+
+                if flag == 2:
+                    x_tmp /= 4
             else:
                 x_tmp = np.ones(To_add, dtype="float")*self.pl.Lx/2
             self.x[Nmin:Nmax] = x_tmp
@@ -67,8 +70,11 @@ class particles:
         if N > 0:
             # we are adding to much particles : we need to extend the system
             self.Npart += N
-            if True:
+            if flag == 1 or flag == 2:
                 x_tmp = rand(N)*self.pl.Lx
+
+                if flag == 2:
+                    x_tmp /= 4
             else:
                 x_tmp = np.ones(N, dtype="float")*self.pl.Lx/2
             self.x = np.append(self.x, x_tmp)

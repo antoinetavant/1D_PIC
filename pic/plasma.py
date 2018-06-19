@@ -3,10 +3,8 @@ import numpy as np
 import pickle
 
 from particles import particles
-from functions import (numba_interp1D, generate_maxw, numba_interp1D_normed,
-                       velocity_maxw_flux, numba_return_part_diag)
-from numba import jit
-from constantes import (me, q, kb, eps_0, mi)
+from functions import (max_vect, numba_interp1D_normed, numba_return_part_diag)
+from constantes import (me, q, eps_0, mi)
 from poisson_solver import Poisson_Solver
 import h5py
 
@@ -18,7 +16,7 @@ class plasma:
                  n_average=1,
                  n_0=0,
                  Do_diags=True,
-                 floating_boundary = False,
+                 floating_boundary=False,
                  ):
 
         # Parameters
@@ -38,7 +36,7 @@ class plasma:
 
         # Simulations
         self.ele = particles(Npart, Te, me, self)
-        self.ion = particles(2, Ti, mi, self)
+        self.ion = particles(Npart, Ti, 100*me, self)
 
         self.E = np.zeros((self.N_cells, 3))
         self.phi = np.zeros(self.N_cells)
@@ -77,8 +75,10 @@ class plasma:
         """print some stuffs, upgrade would be a graphic interface
         """
         print("~~~~~~ Initialisation of Plasma simulation ~~~~~~~~~~")
-        print(f"time step dT={self.dT*1e12:2.2f} mus, wpe = {1e12/self.wpe:2.2f} mus")
-        print(f"mesh step dX={self.dx*1e6:2.2f} mu m, LDe = {self.LDe*1e6:2.2f}")
+        print("time step dT={:2.2f} mus, wpe = {:2.2f} mus".format(
+            self.dT*1e12, 1e12/self.wpe))
+        print("mesh step dX= {:2.2f} mu m, LDe = {:2.2f}".format(
+            self.dx*1e6, self.LDe*1e6))
         print(" Let's go !!")
 
         V = self.validated()
@@ -108,6 +108,24 @@ class plasma:
                     raise ValueError
 
             part.x[:Nmax] += part.V[:Nmax, 0] * self.dT
+
+    def boundary_irdsall(self):
+        """look at the postition of the particle,
+         and remove them if they are outside"""
+        for key, part in zip(['Ie_w', 'Ii_w'], [self.ele, self.ion]):
+
+            "mirror the particle on the left boundary"
+            mask = part.x <= 0.0
+            Nparts = mask.sum()
+            part.V[mask, 0] *= -1
+            part.V[mask, 0] = max_vect(Nparts, part.T, part.m)
+            part.x[mask] = np.random.rand(Nparts)*part.V[mask, 0]*self.dT
+
+            Nout = part.remove_parts(self.Lx)
+
+            self.history[key].append(Nout)
+
+
 
     def boundary(self, absorbtion=True, injection=True):
         """look at the postition of the particle,
@@ -147,14 +165,14 @@ class plasma:
 
         return mask
 
-    def inject_particles(self, Ne, Ni):
+    def inject_particles(self, Ne, Ni, flag=1):
         """inject particle with maxwellian distribution
          uniformely in the system"""
 
         # Would be better to add an array of particle, not a single one
-        self.ele.add_uniform_vect(Ne)
+        self.ele.add_uniform_vect(Ne, flag)
 
-        self.ion.add_uniform_vect(Ni)
+        self.ion.add_uniform_vect(Ni, flag)
 
     def inject_flux(self, Ne, Ni):
         """inject particle with maxwellian flux distribution
@@ -193,7 +211,7 @@ class plasma:
 
         if self.floating_boundary:
             totalCharge = normed_rho.sum()
-            normed_rho[-1] =  -totalCharge
+            normed_rho[-1] = -totalCharge
 
         normed_phi = self.PS.thomas_solver(normed_rho, dx=1., q=1.,
                                            qf=1., eps_0=1.)
@@ -279,12 +297,12 @@ class plasma:
             if np.mod(nt - self.n_0 + 1, self.n_average) == 0:
                 tempdict = {"Te": self.Te,
                             "ne": self.temp_ne,
-                            # "ni": self.temp_ni,
+                            "ni": self.temp_ni,
                             "phi": self.temp_phi,
                             "ve": self.ve,
-                            # "rho": self.temp_rho,
-                            "hist": self.hist_ele,
-                            "Qe": self.Qe,
+                            "rho": self.temp_rho,
+                            # "hist": self.hist_ele,
+                            # "Qe": self.Qe,
                             }
 
                 for k, v in tempdict.items():
@@ -329,10 +347,10 @@ class plasma:
         # size of the window
         root.geometry("400x300")
         my_gui = GUI(root)
-        str1 = f"time step dT = {self.dT*1e12:2.2f} 10^-12 s"
-        str1bis = f", wpe = { (1/self.wpe)*1e12:2.2f} 10^-12 s"
-        str2 = f"mesh step dX = {self.dx*1e6:2.2f} mu m"
-        str2bis = f", LDe = {self.LDe*1e6:2.2f}"
+        str1 = "time step dT = {:2.2f} 10^-12 s".format(self.dT*1e12)
+        str1bis = ", wpe = { :2.2f} 10^-12 s".format((1/self.wpe)*1e12)
+        str2 = "mesh step dX = {:2.2f} mu m".format(self.dx*1e6)
+        str2bis = ", LDe = {:2.2f}".format(self.LDe*1e6)
         my_gui.add_text(str1 + str1bis)
         my_gui.add_text(str2 + str2bis)
 
