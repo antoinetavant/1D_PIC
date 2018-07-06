@@ -42,9 +42,9 @@ However, I should specify that this project's main objective is to test solution
 * Physic and Solvers
 - [x] Electrostatic particle pusher (Leap-frog scheme)
 - [ ] Electromagnetic particle pusher (Boris scheme)
-- [ ] Poisson solver (Thomas's algorithm)
+- [x] Poisson solver (Thomas's algorithm)
 - [x] Wall boundary conditions
-- [ ] periodic boundary conditions
+- [x] periodic boundary conditions
 
 * interface and user experience
 - [ ] GUI for initialisation
@@ -68,4 +68,7 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Acknowledgments
 
-I have to think about it ! The list is long...
+I have to think about it ! The list of my references is long, even though this project is only my own...
+I'd say mostly Vivien Croes and Trevor Lafleur, for now.
+
+I'll improve the list later.
